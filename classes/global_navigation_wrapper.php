@@ -85,21 +85,23 @@ class global_navigation_wrapper {
      * Generates an array of sections and an array of activities for the given course.
      *
      * @param \stdClass $course
-     * @return array Array($sections, $activities)
+     * @return array [$sections, $activities]
      */
-    protected function generate_sections_and_activities(\stdClass $course) : array {
+    protected function generate_sections_and_activities(\stdClass $course): array {
         global $CFG;
         require_once($CFG->dirroot . '/course/lib.php');
 
         $modinfo = get_fast_modinfo($course);
-        $sections = course_get_format($course)->fmt_get_sections();             // CHANGED: Use custom call.
+        $sectionsorig = $modinfo->get_section_info_all();
 
         // For course formats using 'numsections' trim the sections list.
         // REMOVED.
 
-        $activities = array();
+        $sections = [];
+        $activities = [];
 
-        foreach ($sections as $key => $section) {
+        foreach ($sectionsorig as $section) {                                   // CHANGED.
+            $key = $section->id;                                                // ADDED.
             // Clone and unset summary to prevent $SESSION bloat (MDL-31802).
             $sections[$key] = clone($section);
             unset($sections[$key]->summary);
@@ -138,7 +140,7 @@ class global_navigation_wrapper {
             }
         }
 
-        return array($sections, $activities);
+        return [$sections, $activities];
     }
 
     /**
@@ -148,13 +150,13 @@ class global_navigation_wrapper {
      * @param \navigation_node $coursenode
      * @return array An array of course section nodes
      */
-    public function load_generic_course_sections(\stdClass $course, \navigation_node $coursenode) : array {
+    public function load_generic_course_sections(\stdClass $course, \navigation_node $coursenode): array {
         global $CFG, $SITE;                                                     // CHANGED: Removed $DB and $USER.
         require_once($CFG->dirroot . '/course/lib.php');
 
         list($sections, $activities) = $this->generate_sections_and_activities($course);
 
-        $navigationsections = array();
+        $navigationsections = [];
         // ADDED.
         // Navigation node at level n.
         // This is a list of the navigation nodes currently at each level,
@@ -171,11 +173,12 @@ class global_navigation_wrapper {
         // END ADDED.
         foreach ($sections as $sectionid => $section) {
             $section = clone($section);
+            $sectionextra = course_get_format($course)->fmt_get_section_extra($section); // ADDED.
             if ($course->id == $SITE->id) {
                 $this->load_section_activities($coursenode, $section, $activities); // CHANGED: Pass section info rather than num.
             } else {
                 if ((!$section->uservisible && $section->section != 0) || (!$this->innershowemptysections &&
-                        !$section->hasactivites && !$section->hassubsections
+                        !$section->hasactivites && !$sectionextra->hassubsections
                         && $this->inner->includesectionnum !== $section->section    // TODO: Remove?
                         && $this->innerincludesectionid !== $section->id)) {
                             // CHANGED ABOVE: Use sanitised visibility, check for subsections, and use section ID.
@@ -184,22 +187,22 @@ class global_navigation_wrapper {
 
                 // CHANGED.
                 $sectionname = get_section_name($course, $section);
-                $url = course_get_url($course, $section, array('navigation' => true)); // CHANGED: Custom call.
+                $url = course_get_url($course, $section, ['navigation' => true]); // CHANGED: Custom call.
 
                 // Add multiple nodes per section, one per level as required.
                 // The course node already exists, so we must start below course level.
                 // And activities don't seem to get removed from the course node in the Boost theme,
                 // so we need at least one section node to attach activities to.
                 // ADDED.
-                $firstlevel = max($section->levelsan, FORMAT_MULTITOPIC_SECTION_LEVEL_ROOT + 1);
-                $lastlevel = max($section->pagedepthdirect, $firstlevel);
+                $firstlevel = max($sectionextra->levelsan, FORMAT_MULTITOPIC_SECTION_LEVEL_ROOT + 1);
+                $lastlevel = max($sectionextra->pagedepthdirect, $firstlevel);
                 // END ADDED.
                 for ($level = $firstlevel; $level <= $lastlevel; $level++) {
                     $parentnode = $nodeln[$level - 1];                          // ADDED.
                     $nodeid = ($level == $lastlevel) ? $sectionid : $extraid--; // ADDED.
                     $sectionnode = $parentnode->add($sectionname, $url, \navigation_node::TYPE_SECTION,
                         null, $nodeid,
-                        new \pix_icon($section->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC ? 'i/section'
+                        new \pix_icon($sectionextra->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC ? 'i/section'
                                                                                                  : 'e/bullet_list', ''));
                     // CHANGED ABOVE: Attach to parentnode with nodeid as defined above, and use a list icon for topic sections.
                     $sectionnode->nodetype = \navigation_node::NODETYPE_BRANCH;
@@ -215,13 +218,11 @@ class global_navigation_wrapper {
 
                 if ($this->inner->includesectionnum !== false && $this->inner->includesectionnum == $section->section
                         || isset($this->innerincludesectionid) && $this->innerincludesectionid == $section->id
-                        || $section->hassubsections) {
+                        || $sectionextra->hassubsections) {
                             // CHANGED ABOVE: Use section ID.
                             // Also check for subsections, because activities might not get loaded otherwise.
                     $this->load_section_activities($sectionnode, $section, $activities);
                 }
-
-                $section->sectionnode = $sectionnode;
                 $navigationsections[$sectionid] = $section;
                 // END CHANGED.
 
@@ -240,13 +241,13 @@ class global_navigation_wrapper {
      * @return array Array of activity nodes
      */
     protected function load_section_activities(\navigation_node $sectionnode, \section_info $section, array $activities,
-                                                \stdClass $course = null) : array {
+                                                \stdClass $course = null): array {
         // CHANGED ABOVE: Use section info instead of number.
         global $CFG, $SITE;
         // A static counter for JS function naming.
         static $legacyonclickcounter = 0;
 
-        $activitynodes = array();
+        $activitynodes = [];
         if (empty($activities)) {
             return $activitynodes;
         }
@@ -270,7 +271,7 @@ class global_navigation_wrapper {
             }
 
             // Prepare the default name and url for the node.
-            $activityname = format_string($activity->name, true, array('context' => \context_module::instance($activity->id)));
+            $activityname = format_string($activity->name, true, ['context' => \context_module::instance($activity->id)]);
             $action = new \moodle_url($activity->url);
 
             // Check if the onclick property is set (puke!).

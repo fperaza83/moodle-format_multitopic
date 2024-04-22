@@ -37,6 +37,20 @@ use core_courseformat\output\local\content\section\header as header_base;
  */
 class header extends header_base {
 
+    /** @var \format_multitopic\section_info_extra Multitopic-specific section information */
+    protected $fmtsectionextra;
+
+    /**
+     * Constructor.
+     *
+     * @param \format_multitopic $format the course format
+     * @param \section_info $section the section info
+     */
+    public function __construct(\format_multitopic $format, \section_info $section) {
+        parent::__construct($format, $section);
+        $this->fmtsectionextra = $format->fmt_get_section_extra($section);
+    }
+
     /**
      * Export this data so it can be used as the context for a mustache template.
      *
@@ -44,9 +58,11 @@ class header extends header_base {
      * @return \stdClass data context for a mustache template
      */
     public function export_for_template(\renderer_base $output): \stdClass {
+        global $CFG;
 
         $format = $this->format;
         $section = $this->section;
+        $sectionextra = $this->fmtsectionextra;
         $course = $format->get_course();
 
         $data = (object)[
@@ -56,14 +72,14 @@ class header extends header_base {
 
         $data->title = $output->section_title_without_link($section, $course);
 
-        if ($section->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC) {       // CHANGED link condition.
+        if ($sectionextra->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC) {  // CHANGED link condition.
             $data->title = $output->section_title($section, $course);
         }
 
         // REMOVED stealth sections.
 
         // ADDED.
-        $data->fmticon = $section->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC ?
+        $data->fmticon = $sectionextra->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC ?
                             'icon fa fa-folder-o fa-fw' : 'icon fa fa-list fa-fw';
         // END ADDED.
 
@@ -80,6 +96,8 @@ class header extends header_base {
         // REMOVED index page.
 
         $data->name = get_section_name($course, $section);
+
+        $data->sectionbulk = ($CFG->version >= 2023021000);
 
         return $data;
     }

@@ -35,12 +35,12 @@ $id = required_param('id', PARAM_INT);    // Course_sections.id .
 // REMOVED $sectionreturn .
 $deletesection = optional_param('delete', 0, PARAM_BOOL);
 
-$PAGE->set_url('/course/format/multitopic/_course_editsection.php', array('id' => $id));
+$PAGE->set_url('/course/format/multitopic/_course_editsection.php', ['id' => $id]);
 // CHANGED LINE ABOVE: Custom script, and omit $sectionreturn.
 // NOTE: Can't revert this without changing reference to $PAGE->url ?
 
-$section = $DB->get_record('course_sections', array('id' => $id), '*', MUST_EXIST);
-$course = $DB->get_record('course', array('id' => $section->course), '*', MUST_EXIST);
+$section = $DB->get_record('course_sections', ['id' => $id], '*', MUST_EXIST);
+$course = $DB->get_record('course', ['id' => $section->course], '*', MUST_EXIST);
 // REMOVED sectionnum .
 
 require_login($course);
@@ -48,7 +48,8 @@ $context = \context_course::instance($course->id);
 require_capability('moodle/course:update', $context);
 
 // Get section_info object with all availability options.
-$sectioninfo = course_get_format($course)->fmt_get_section($section);           // CHANGED: Use custom function, pass section info.
+$sectioninfo = get_fast_modinfo($course)->get_section_info_by_id($section->id); // CHANGED.
+$sectioninfoextra = course_get_format($course)->fmt_get_section_extra($section); // ADDED.
 
 // Deleting the section.
 if ($deletesection) {
@@ -65,10 +66,10 @@ if ($deletesection) {
             // ADDED.
             // If section was topic level, return to page, else return to previous section.
             $sectionreturn = new \stdClass();
-            if ($sectioninfo->levelsan >= FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC) {
-                $sectionreturn->id = $sectioninfo->parentid;
+            if ($sectioninfoextra->levelsan >= FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC) {
+                $sectionreturn->id = $sectioninfoextra->parentid;
             } else {
-                $sectionreturn->id = $sectioninfo->prevupid;
+                $sectionreturn->id = $sectioninfoextra->prevupid;
             }
             // END ADDED.
             $courseurl = course_get_url($course, $sectionreturn);               // CHANGED: Use sectionreturn defined above.
@@ -84,7 +85,7 @@ if ($deletesection) {
             $PAGE->set_heading($course->fullname);
             echo $OUTPUT->header();
             echo $OUTPUT->box_start('noticebox');
-            $optionsyes = array('id' => $id, 'confirm' => 1, 'delete' => 1, 'sesskey' => sesskey());
+            $optionsyes = ['id' => $id, 'confirm' => 1, 'delete' => 1, 'sesskey' => sesskey()];
             $deleteurl = new \moodle_url('/course/format/multitopic/_course_editsection.php', $optionsyes);
             // CHANGED LINE ABOVE: Custom script.
             $formcontinue = new \single_button($deleteurl, get_string('delete'));
@@ -100,23 +101,23 @@ if ($deletesection) {
     }
 }
 
-$editoroptions = array(
+$editoroptions = [
     'context' => $context,
     'maxfiles' => EDITOR_UNLIMITED_FILES,
     'maxbytes' => $CFG->maxbytes,
     'trusttext' => false,
     'noclean' => true,
-    'subdirs' => true
-);
+    'subdirs' => true,
+];
 
 $courseformat = course_get_format($course);
-$defaultsectionname = $courseformat->get_default_section_name($sectioninfo);    // CHANGED: Use custom section info.
+$defaultsectionname = $courseformat->get_default_section_name($sectioninfo);    // CHANGED: Use section info.
 
-$customdata = array(
+$customdata = [
     'cs' => $sectioninfo,
     'editoroptions' => $editoroptions,
-    'defaultsectionname' => $defaultsectionname
-);
+    'defaultsectionname' => $defaultsectionname,
+];
 $mform = $courseformat->editsection_form($PAGE->url, $customdata);
 
 // Set current value, make an editable copy of section_info object.
@@ -144,15 +145,15 @@ if ($mform->is_cancelled()) {
     }
     course_update_section($course, $section, $data);
     // ADDED: Update section info for return URL.
-    if (isset($data->level) && ($data->level != $sectioninfo->levelsan) && ($sectioninfo->section > 0)) {
+    if (isset($data->level) && ($data->level != $sectioninfoextra->levelsan) && ($sectioninfo->section > 0)) {
         // If the level was changed, update the section info properties relevant to generating the URL.
-        // This is a hack to avoid recalculating section properties.
-        if (($sectioninfo->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC)
+        // This is a hack to avoid recalculating section properties.  TODO: Remove?
+        if (($sectioninfoextra->levelsan < FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC)
             && ($data->level >= FORMAT_MULTITOPIC_SECTION_LEVEL_TOPIC)) {
             // If the section was changed to Topic level, the former previous page will be the new parent page.
-            $sectioninfo->parentid = $sectioninfo->prevpageid;
+            $sectioninfoextra->parentid = $sectioninfoextra->prevpageid;
         }
-        $sectioninfo->levelsan = $data->level;
+        $sectioninfoextra->levelsan = $data->level;
     }
     // END ADDED.
 
@@ -162,10 +163,10 @@ if ($mform->is_cancelled()) {
 
 // The edit form is displayed for the first time or if there was validation error on the previous step.
 $sectionname = get_section_name($course, $sectioninfo);                         // CHANGED: Pass sectioninfo rather than number.
-$stredit = get_string('edita', '', " $sectionname");
-$strsummaryof = get_string('summaryof', '', " $sectionname");
+$stredit = get_string(($CFG->version >= 2024021500) ? 'editsectiontitle' : 'edita', '', $sectionname);
+$strsummaryof = get_string(($CFG->version >= 2024021500) ? 'editsectionsettings' : 'summaryof', '', $sectionname);
 
-$PAGE->set_title($stredit);
+$PAGE->set_title($stredit . ($CFG->version >= 2024021500 ? (moodle_page::TITLE_SEPARATOR . $course->shortname) : ''));
 $PAGE->set_heading($course->fullname);
 $PAGE->navbar->add($stredit);
 echo $OUTPUT->header();

@@ -18,7 +18,6 @@ namespace format_multitopic\output\courseformat\state;
 
 use core_courseformat\output\local\state\course as base_course;
 use core_courseformat\base as course_format;
-use moodle_url;
 use stdClass;
 
 defined('MOODLE_INTERNAL') || die();
@@ -53,27 +52,31 @@ class course extends base_course {
      * @return stdClass data context for a mustache template
      */
     public function export_for_template(\renderer_base $output): stdClass {
+        global $CFG;
         $data = parent::export_for_template($output);
 
         $data->firstsectionlist = [];
         $data->secondsectionlist = [];
+        $data->draganddropsectionmoveafter = $CFG->version >= 2023120100;
 
         $format = $this->format;
-        $sections = $format->fmt_get_sections();
+        $sectionsextra = $format->fmt_get_sections_extra();
         $parentid = null;
         $lastparentid = null;
 
-        foreach ($sections as $section) {
-            if ($format->is_section_visible($section)) {
-                if ($section->levelsan <= 0) {
+        foreach ($sectionsextra as $sectionextra) {
+            $section = $sectionextra->sectionbase;
+            if (empty($section->component) && $format->is_section_visible($section)) {
+                if ($sectionextra->levelsan <= 0) {
                     $parentid = $section->id;
                     $lastparentid = $section->id;
-                    $data->secondsectionlist[$parentid] = [$section->id]; // Tabs uses first item as parent, Course index might not.
+                    // Tabs uses first item as parent, Course index might not.
+                    $data->secondsectionlist[$parentid] = [$section->id];
                     $data->firstsectionlist[] = $section->id;
-                } else if ($section->levelsan == 1) {
+                } else if ($sectionextra->levelsan == 1) {
                     $lastparentid = $section->id;
                     $data->secondsectionlist[$parentid][] = $section->id;
-                } else if ($section->levelsan == 2) {
+                } else if ($sectionextra->levelsan == 2) {
                     $data->thirdsectionlist[$lastparentid][] = $section->id;
                 }
             }
