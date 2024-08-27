@@ -440,12 +440,12 @@ class format_multitopic extends core_courseformat\base {
                             . '–' . $yearendstring . $weekword . ' ' . $dateend->W . ' ' . $dateend->D;
                 }
             }
-            $daystring = $daystring . ': ';
+            $daystring = '<span class="section-title-prefix">' . $daystring . ': ' . '</span>';
         }
         // END ADDED.
 
         if ((string)$section->name !== '') {
-            return format_string($daystring . $section->name, true,
+            return $daystring . format_string($section->name, true,
                     ['context' => context_course::instance($this->courseid)]);  // CHANGED.
         } else {
             return $daystring . $this->get_default_section_name($section);
@@ -609,12 +609,12 @@ class format_multitopic extends core_courseformat\base {
     /**
      * Set and return the format section preferences.
      *
-     * @param string $preferencename preference name
-     * @param int[] $sectionids affected section IDs
+     * @param string|null $preferencename preference name
+     * @param int[]|null $sectionids affected section IDs
      * @return array of preferences indexed by section ID
      *
      */
-    protected function fmt_set_get_sections_preferences(string $preferencename = null, array $sectionids = null): array {
+    protected function fmt_set_get_sections_preferences(?string $preferencename = null, ?array $sectionids = null): array {
 
         $course = $this->get_course();
         $sectionsextra = $this->fmt_get_sections_extra();
